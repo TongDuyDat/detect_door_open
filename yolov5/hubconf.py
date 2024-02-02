@@ -64,6 +64,7 @@ def _create(name, pretrained=True, channels=3, classes=80, autoshape=True, verbo
             except Exception:
                 model = attempt_load(path, device=device, fuse=False)  # arbitrary model
         else:
+            print(f"{path.stem}.yaml")
             cfg = list((Path(__file__).parent / "models").rglob(f"{path.stem}.yaml"))[0]  # model.yaml path
             model = DetectionModel(cfg, channels, classes)  # create model
             if pretrained:
@@ -83,9 +84,9 @@ def _create(name, pretrained=True, channels=3, classes=80, autoshape=True, verbo
         raise Exception(s) from e
 
 
-def custom(path="path/to/model.pt", autoshape=True, _verbose=True, device=None):
+def custom(path="path/to/model.pt", pretrained = True, autoshape=True, classes = 2, channels = 3, _verbose=True, device=None):
     # YOLOv5 custom or local model
-    return _create(path, autoshape=autoshape, verbose=_verbose, device=device)
+    return _create(path, autoshape=autoshape, pretrained = pretrained, classes = classes, channels=channels, verbose=_verbose, device=device)
 
 
 def yolov5n(pretrained=True, channels=3, classes=80, autoshape=True, _verbose=True, device=None):

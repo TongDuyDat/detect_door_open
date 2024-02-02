@@ -34,8 +34,11 @@ import os
 import platform
 import sys
 from pathlib import Path
-
+import pathlib
+import numpy as np
 import torch
+
+from yolov5.models.experimental import attempt_load
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
@@ -64,13 +67,15 @@ from utils.general import (
     xyxy2xywh,
 )
 from utils.torch_utils import select_device, smart_inference_mode
-
+from utils.augmentations import letterbox
+temp = pathlib.PosixPath
+pathlib.PosixPath = pathlib.WindowsPath
 
 @smart_inference_mode()
 def run(
     weights=ROOT / "yolov5s.pt",  # model path or triton URL
     source=ROOT / "data/images",  # file/dir/URL/glob/screen/0(webcam)
-    data=ROOT / "data/coco128.yaml",  # dataset.yaml path
+    data=ROOT / "yolov5/data/data.yaml",  # dataset.yaml path
     imgsz=(640, 640),  # inference size (height, width)
     conf_thres=0.25,  # confidence threshold
     iou_thres=0.45,  # NMS IOU threshold
@@ -262,7 +267,6 @@ def run(
     if update:
         strip_optimizer(weights[0])  # update model (to fix SourceChangeWarning)
 
-
 def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument("--weights", nargs="+", type=str, default=ROOT / "yolov5s.pt", help="model path or triton URL")
@@ -307,3 +311,42 @@ def main(opt):
 if __name__ == "__main__":
     opt = parse_opt()
     main(opt)
+
+from api.config import Config
+def detect_img(img, model, agnostic = True):
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    half = device.type != "cpu"
+    stride = int(model.stride.max())  # model stride
+    imgsz = check_img_size(640, s=stride) # check img_size
+    im0 = letterbox(img, 640, stride=stride)[0]
+    names = model.module.names if hasattr(model, 'module') else model.names  # get class names
+    classes = model.names
+    if half:
+        model.half()  # to FP16
+    
+    img = torch.from_numpy(im0).to(device)
+    img = img.half() if half else img.float()  # uint8 to fp16/32
+    img /= 255.0  # 0 - 255 to 0.0 - 1.0
+    if img.ndimension() == 3:
+        img = img.unsqueeze(0)
+    img = img.permute(0,  3, 1, 2) # NCHW -> NHWC
+    pred = model(img, augment= True)[0]
+    
+    pred = non_max_suppression(pred, Config.SCORE_threshold, Config.IOU_cof, agnostic=agnostic)
+    for i, det in enumerate(pred):
+        annotator = Annotator(im0, line_width= 2)
+        if det is not None and len(det):
+            det[:, :4] = scale_boxes(img.shape[2:], det[:, :4], im0.shape).round()
+            
+            xywhs = xyxy2xywh(det[:, 0:4])
+            confs = det[:, 4]
+            clss = det[:, 5]
+            
+            for *xyxy, conf, cls in reversed(det):
+                c = int(cls)  # integer class
+                label = names[c] + " {}".format(conf)
+                annotator.box_label(xyxy,  label, color= colors(c, True))
+                
+        im0 = annotator.result()
+    
+    return im0, pred
