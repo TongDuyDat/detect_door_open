@@ -37,7 +37,7 @@ from pathlib import Path
 import pathlib
 import numpy as np
 import torch
-
+from Config import *
 from yolov5.models.experimental import attempt_load
 
 FILE = Path(__file__).resolve()
@@ -313,7 +313,7 @@ if __name__ == "__main__":
     main(opt)
 
 from api.config import Config
-def detect_img(img, model, agnostic = True):
+def detect_img(img, model, save_vid = False, agnostic = True, ffmpeg = None):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     half = device.type != "cpu"
     stride = int(model.stride.max())  # model stride
@@ -332,7 +332,8 @@ def detect_img(img, model, agnostic = True):
     img = img.permute(0,  3, 1, 2) # NCHW -> NHWC
     pred = model(img, augment= True)[0]
     
-    pred = non_max_suppression(pred, Config.SCORE_threshold, Config.IOU_cof, agnostic=agnostic)
+    pred = non_max_suppression(pred, Config.SCORE_threshold, Config.IOU_cof,classes = [0, 1] ,agnostic=agnostic)
+    obj_pred = []
     for i, det in enumerate(pred):
         annotator = Annotator(im0, line_width= 2)
         if det is not None and len(det):
@@ -341,12 +342,11 @@ def detect_img(img, model, agnostic = True):
             xywhs = xyxy2xywh(det[:, 0:4])
             confs = det[:, 4]
             clss = det[:, 5]
-            
+            obj_pred = clss
             for *xyxy, conf, cls in reversed(det):
                 c = int(cls)  # integer class
-                label = names[c] + " {}".format(conf)
+                label = str(c) + names[c] + " {}".format(conf)
                 annotator.box_label(xyxy,  label, color= colors(c, True))
                 
-        im0 = annotator.result()
-    
-    return im0, pred
+        im0 = annotator.result() 
+    return im0, pred, obj_pred
